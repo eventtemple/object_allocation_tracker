@@ -16,8 +16,7 @@ static void event_hook(VALUE tpval, void *data)
 }
 
 /*
-  Registers the tracepoint that will fire when an object is allocated, and sets the allocation count to 0. A word of
-  caution that RUBY_INTERNAL_EVENT_NEWOBJ is not technically a public API and could change in the future.
+  Registers the tracepoint that will fire when an object is allocated, and sets the allocation count to 0.
 
   :nodoc:
 */
@@ -83,9 +82,9 @@ static VALUE count_allocations_within_block(VALUE self)
   :TODO: Further testing should be done to ensure this is truely thread-safe. I believe it is, but there could be some
   edge cases, like if threads aren't properly syncronized by calling libraries for whatever reason.
 
-  :TODO: It may make sense to provide a mechanism in the tracking to record the allocations by an identifier of the caller,
+  :TODO: It may make sense to provide a mechanism in the tracking to record child allocations by an identifier of the caller,
   and allow the reset of the stored aggregate count. This would allow the called to track allocations by specific groupings
-  like a call to a call specific method, class, etc. Something to think about for the future.
+  like a call to a specific framework, class, etc. Something to think about for the future.
 
   :nodoc:
 */
