@@ -1,4 +1,4 @@
-#include <ruby/ruby.h>
+#include <ruby.h>
 #include <ruby/debug.h>
 
 static ID id_allocation_count;
@@ -11,45 +11,13 @@ static ID id_allocation_count;
 */
 static void event_hook(VALUE tpval, void *data)
 {
-  VALUE current_count_value = rb_thread_local_aref(rb_thread_current(), id_allocation_count);
-  size_t current_count = 0;
-
-  if (!NIL_P(current_count_value))
-  {
-    current_count = NUM2SIZET(current_count_value);
-  }
+  VALUE thread = rb_thread_current();
+  VALUE current_count_value = rb_thread_local_aref(thread, id_allocation_count);
+  size_t current_count = (NIL_P(current_count_value)) ? 0 : NUM2SIZET(current_count_value);
 
   current_count++;
 
-  rb_thread_local_aset(rb_thread_current(), id_allocation_count, SIZET2NUM(current_count));
-}
-
-/*
-  Registers the tracepoint that will fire when an object is allocated, and sets the starting count on the thread's
-  local storage to the default 0.
-
-  :nodoc:
-*/
-static VALUE start_allocation_count(VALUE self)
-{
-  rb_thread_local_aset(rb_thread_current(), id_allocation_count, SIZET2NUM(0));
-  VALUE tracepoint = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_NEWOBJ, event_hook, NULL);
-  rb_tracepoint_enable(tracepoint);
-  return tracepoint;
-}
-
-/*
-  Stops the tracepoint that was registered from firing any further, and sets the threads locally stored count to
-  nil so that it can be garbage collected.
-
-  :nodoc:
-*/
-static VALUE stop_allocation_count(VALUE tp)
-{
-  rb_tracepoint_disable(tp);
-  VALUE count = rb_thread_local_aref(rb_thread_current(), id_allocation_count);
-  rb_thread_local_aset(rb_thread_current(), id_allocation_count, Qnil);
-  return count;
+  rb_thread_local_aset(thread, id_allocation_count, SIZET2NUM(current_count));
 }
 
 /* Document-method: start
@@ -60,17 +28,33 @@ static VALUE stop_allocation_count(VALUE tp)
  * Begins tracking object allocations.
  *
  * This method enables the tracking which will count objects allocated during a block execution. The block will return
- * the number of objects allocated during the block execution.
+ * the number of objects allocated during the block execution, and the results of the block executed
  *
- *   ObjectAllocationTracker.start do
+ *   allocations, result = ObjectAllocationTracker.start do
  *     # ... code that creates objects ...
  *   end
  */
-static VALUE rb_object_allocation_tracker_start(VALUE self)
+static VALUE start(VALUE self)
 {
-  VALUE tp = start_allocation_count(self);
+  rb_thread_local_aset(rb_thread_current(), id_allocation_count, SIZET2NUM(0));
 
-  return rb_ensure(rb_yield, Qundef, stop_allocation_count, tp);
+  VALUE tp = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_NEWOBJ, event_hook, NULL);
+  rb_tracepoint_enable(tp);
+
+  int state;
+  VALUE result = rb_protect(rb_yield, Qundef, &state);
+
+  rb_tracepoint_disable(tp);
+
+  VALUE count = rb_thread_local_aref(rb_thread_current(), id_allocation_count);
+  rb_thread_local_aset(rb_thread_current(), id_allocation_count, Qnil);
+
+  if (state)
+  {
+    rb_jump_tag(state);
+  }
+
+  return rb_ary_new_from_args(2, count, result);
 }
 
 /*
@@ -83,6 +67,6 @@ static VALUE rb_object_allocation_tracker_start(VALUE self)
 void Init_object_allocation_tracker(void)
 {
   VALUE cObjectAllocationTracker = rb_define_class("ObjectAllocationTracker", rb_cObject);
-  rb_define_singleton_method(cObjectAllocationTracker, "start", rb_object_allocation_tracker_start, 0);
   id_allocation_count = rb_intern("allocation_count");
+  rb_define_singleton_method(cObjectAllocationTracker, "start", start, 0);
 }
