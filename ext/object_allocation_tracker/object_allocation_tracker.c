@@ -1,61 +1,61 @@
 #include <ruby/ruby.h>
 #include <ruby/debug.h>
 
-static size_t allocation_count = 0;
-static VALUE tracepoint = Qnil;
+static ID id_allocation_count;
 
 /*
-  Event hook that fires when an object is allocated. This is registered with the tracepoint, and increments the
-  allocation count.
+  Event hook that fires when an object is allocated. This is used to track the allocations and
+  utilizes thread local storage to keep track of the count per thread, and should be thread safe.
 
   :nodoc:
 */
 static void event_hook(VALUE tpval, void *data)
 {
-  allocation_count++;
+  VALUE current_count_value = rb_thread_local_aref(rb_thread_current(), id_allocation_count);
+  size_t current_count = 0;
+
+  if (!NIL_P(current_count_value))
+  {
+    current_count = NUM2SIZET(current_count_value);
+  }
+
+  current_count++;
+
+  rb_thread_local_aset(rb_thread_current(), id_allocation_count, SIZET2NUM(current_count));
 }
 
 /*
-  Registers the tracepoint that will fire when an object is allocated, and sets the allocation count to 0.
+  Registers the tracepoint that will fire when an object is allocated, and sets the starting count on the thread's
+  local storage to the default 0.
 
   :nodoc:
 */
 static VALUE start_allocation_count(VALUE self)
 {
-  allocation_count = 0;
-
-  /*
-    Enable the tracepoint only for object allocation events. Need to do some testing to see what the performance
-    implications are of registering the tracepoints are at the block level. If it's too much overhead then we'll
-    need to register the tracepoint when the extension is loaded, and figure out a way to ignore events unless the
-    call has actually happened, and maintain a list of allocation counts by caller that get freed.
-  */
-  tracepoint = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_NEWOBJ, event_hook, (void *)NULL);
-
+  rb_thread_local_aset(rb_thread_current(), id_allocation_count, SIZET2NUM(0));
+  VALUE tracepoint = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_NEWOBJ, event_hook, NULL);
   rb_tracepoint_enable(tracepoint);
-
-  return Qnil;
+  return tracepoint;
 }
 
 /*
-  Stops the tracepoint that was registered from firing, after the block has finished executing.
+  Stops the tracepoint that was registered from firing any further, and sets the threads locally stored count to
+  nil so that it can be garbage collected.
 
   :nodoc:
 */
-static VALUE stop_allocation_count(VALUE self)
+static VALUE stop_allocation_count(VALUE tp)
 {
-  if (!NIL_P(tracepoint))
-  {
-    rb_tracepoint_disable(tracepoint);
-  }
-
-  return Qnil;
+  rb_tracepoint_disable(tp);
+  VALUE count = rb_thread_local_aref(rb_thread_current(), id_allocation_count);
+  rb_thread_local_aset(rb_thread_current(), id_allocation_count, Qnil);
+  return count;
 }
 
 /* Document-method: start
  *
  * call-seq:
- *   ObjectAllocationTracker.start -> 1000
+ *   ObjectAllocationTracker.start {} -> 1000
  *
  * Begins tracking object allocations.
  *
@@ -66,12 +66,11 @@ static VALUE stop_allocation_count(VALUE self)
  *     # ... code that creates objects ...
  *   end
  */
-static VALUE count_allocations_within_block(VALUE self)
+static VALUE rb_object_allocation_tracker_start(VALUE self)
 {
-  start_allocation_count(self);
-  rb_ensure(rb_yield, Qundef, stop_allocation_count, self);
+  VALUE tp = start_allocation_count(self);
 
-  return SIZET2NUM(allocation_count);
+  return rb_ensure(rb_yield, Qundef, stop_allocation_count, tp);
 }
 
 /*
@@ -79,17 +78,11 @@ static VALUE count_allocations_within_block(VALUE self)
   new class called ObjectAllocationTracker, and a class method of start that takes a block and returns the number of
   object allocations that occurred within the block.
 
-  :TODO: Further testing should be done to ensure this is truely thread-safe. I believe it is, but there could be some
-  edge cases, like if threads aren't properly syncronized by calling libraries for whatever reason.
-
-  :TODO: It may make sense to provide a mechanism in the tracking to record child allocations by an identifier of the caller,
-  and allow the reset of the stored aggregate count. This would allow the called to track allocations by specific groupings
-  like a call to a specific framework, class, etc. Something to think about for the future.
-
   :nodoc:
 */
 void Init_object_allocation_tracker(void)
 {
   VALUE cObjectAllocationTracker = rb_define_class("ObjectAllocationTracker", rb_cObject);
-  rb_define_singleton_method(cObjectAllocationTracker, "start", count_allocations_within_block, 0);
+  rb_define_singleton_method(cObjectAllocationTracker, "start", rb_object_allocation_tracker_start, 0);
+  id_allocation_count = rb_intern("allocation_count");
 }

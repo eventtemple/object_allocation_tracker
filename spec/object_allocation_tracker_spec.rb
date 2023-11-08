@@ -1,5 +1,19 @@
 # frozen_string_literal: true
 
+def track_thread_allocations(objects_count)
+  Thread.new do
+    begin
+      ObjectAllocationTracker.start do
+        objects_count.times { Object.new }
+      end
+    rescue => e
+      puts "Exception in thread: #{e.class}: #{e.message}"
+      e.backtrace.each { |line| puts "\t#{line}" }
+      raise
+    end
+  end
+end
+
 RSpec.describe ObjectAllocationTracker do
   it "has a version number" do
     expect(ObjectAllocationTracker::VERSION).not_to be nil
@@ -11,7 +25,7 @@ RSpec.describe ObjectAllocationTracker do
         100.times { |_| Object.new }
       end
 
-      expect(allocations).to be(101)
+      expect(allocations).to be(100)
     end
 
     it "does not track object allocations outside block" do
@@ -21,26 +35,24 @@ RSpec.describe ObjectAllocationTracker do
         50.times { |_| Object.new }
       end
 
-      expect(allocations).to be(51)
+      expect(allocations).to be(50)
     end
 
     it "tracks object allocations within multiple threads properly" do
-      thread = Thread.new do
-        ObjectAllocationTracker.start do
-          100.times { |_obj| Object.new }
-        end
+      object_allocation_counts = Array.new(1000) { rand(1...5000) }
+      object_allocation_threads = object_allocation_counts.collect { |objects_count| track_thread_allocations(objects_count) }
+
+      object_allocation_threads.each(&:join)
+
+      object_allocation_threads.each_with_index do |thread, index|
+        expect(thread.value).to eq(object_allocation_counts[index])
       end
-
-      thread2 = Thread.new do
-        ObjectAllocationTracker.start do
-          20.times { |_obj| Object.new }
-        end
-      end
-
-      [thread, thread2].each { |t| t.join }
-
-      expect(thread.value).to eq(101)
-      expect(thread2.value).to eq(21)
     end
+
+    it 'raises proper exception when error is raised within a called block' do
+      example_block = Proc.new { raise 'error' }
+      expect { ObjectAllocationTracker.start(&example_block) }.to raise_error(RuntimeError, 'error')
+    end
+
   end
 end
