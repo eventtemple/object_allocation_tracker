@@ -35,6 +35,10 @@ static VALUE start_allocation_count(VALUE self)
   rb_thread_local_aset(rb_thread_current(), id_allocation_count, SIZET2NUM(0));
   VALUE tracepoint = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_NEWOBJ, event_hook, NULL);
   rb_tracepoint_enable(tracepoint);
+
+  // Debug output
+  fprintf(stderr, "Starting allocation count for thread: %ld\n", rb_thread_id(rb_thread_current()));
+
   return tracepoint;
 }
 
@@ -48,6 +52,10 @@ static VALUE stop_allocation_count(VALUE tp)
 {
   rb_tracepoint_disable(tp);
   VALUE count = rb_thread_local_aref(rb_thread_current(), id_allocation_count);
+
+  fprintf(stderr, "Stopping allocation count for thread: %ld\n", rb_thread_id(rb_thread_current()));
+  fprintf(stderr, "Allocation count is: %lu\n", NUM2SIZET(count));
+
   rb_thread_local_aset(rb_thread_current(), id_allocation_count, Qnil);
   return count;
 }
