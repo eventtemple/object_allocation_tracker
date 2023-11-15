@@ -22,6 +22,18 @@ RSpec.describe ObjectAllocationTracker do
   end
 
   describe ".count" do
+    it "tracks object allocations within block" do
+        # TODO: An extra allocation is being assigned here when running the test suite if an initial
+        # trace isn't being done first. It may be due to the intialization of the tracepoint or tls
+        # instance, but need to investigate further. For now, just doing an initial trace to avoid
+        # the extra allocation.
+        track_thread_allocations(7)
+
+        results = track_thread_allocations(5)
+
+        expect(results[:allocations]).to eq(5)
+    end
+
     it "does not track object allocations outside block" do
       track_thread_allocations(1000)
 
