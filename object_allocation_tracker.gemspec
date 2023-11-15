@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.summary = "Provides object allocation counting via tracepoint events"
   spec.description = spec.summary
   spec.homepage = "https://github.com/eventtemple/object_allocation_tracker"
-  spec.required_ruby_version = ">= 3.2.1"
+  spec.required_ruby_version = ">= 3.0.0"
 
   spec.metadata["allowed_push_host"] = "Set to your gem server 'https://example.com'"
 
