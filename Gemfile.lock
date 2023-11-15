@@ -7,7 +7,6 @@ GEM
   remote: https://rubygems.org/
   specs:
     diff-lcs (1.5.0)
-    memory_profiler (1.0.1)
     rake (13.1.0)
     rake-compiler (1.2.5)
       rake
@@ -31,7 +30,6 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
-  memory_profiler
   object_allocation_tracker!
   rake (~> 13.0)
   rake-compiler

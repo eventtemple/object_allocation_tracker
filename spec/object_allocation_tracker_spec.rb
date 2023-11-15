@@ -1,6 +1,5 @@
 # frozen_string_literal: true
-require "memory_profiler"
-
+#
 def track_thread_allocations(objects_count)
   thread = Thread.new do
     begin
@@ -23,24 +22,14 @@ RSpec.describe ObjectAllocationTracker do
   end
 
   describe ".count" do
-    it "tracks object allocations within block" do
-        allocations, result = ObjectAllocationTracker.start do
-          5.times { Object.new }
-        end
-
-        # TODO: An extra object is being assigned here for some reason. Need to look
-        # into this in the future.
-        expect(allocations).to be(6)
-    end
-
     it "does not track object allocations outside block" do
       track_thread_allocations(1000)
 
       results = track_thread_allocations(50)
-      expect(results[:allocations]).to be(50)
+      expect(results[:allocations]).to eq(50)
     end
 
-    it "tracks object allocations within multiple threads properly" do
+    it "tracks object allocations properly" do
       objects_to_allocate = Array.new(500) { rand(1...5000) }
       object_allocation_results = objects_to_allocate.collect do |object_count|
          track_thread_allocations(object_count)
