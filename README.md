@@ -3,7 +3,7 @@
 **This is a prototype and work in progress. It's not recommended for general usage until more testing has been done.**
 
 This project provides a simple, alternative, and performant way to track object allocations without impacting
-performance as much object space tracing does from within Ruby. It's useful for gathering metrics in production-like
+performance as much object space tracing does from within Ruby. It's useful for gathering metrics in production
 environments for debugging memory bloat and leak issues.
 
 This stemmed from needing better allocation data within New Relic, and takes a similar approach to how both Scout and
